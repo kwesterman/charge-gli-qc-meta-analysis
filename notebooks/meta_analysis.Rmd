@@ -1,0 +1,79 @@
+---
+title: "Run study/population-specific QC"
+author: "Kenny Westerman"
+output: html_document
+---
+
+To-do:
+* Meta-analysis should be additional grouped by stage
+
+```{r setup, include=FALSE}
+ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
+
+system("mkdir -p metal_output")
+
+library(tidyverse)
+library(knitr)
+```
+
+```{r prep-meta-analysis}
+system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
+
+if (!file.exists("opt/patched_metal_20100208")) {
+  system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
+  # system("tar xvf opt/generic-metal-2010-02-08.tar.gz -C opt/")
+  # system("wget https://github.com/libarchive/libarchive/releases/download/v3.7.2/libarchive-3.7.2.tar.gz && tar zxvf libarchive-3.7.2.tar.gz -C opt && cd opt/libarchive-3.7.2 && ./configure && make")
+  # system("opt/libarchive-3.7.2/bsdtar xvf opt/metal-2010-02-08-patch2.tar.gz -C opt/")
+  # system("wget https://github.com/libarchive/libarchive/releases/download/v3.7.2/libarchive-3.7.2.tar.gz && tar zxvf libarchive-3.7.2.tar.gz -C opt && cd opt/libarchive-3.7.2 && ./configure && make")
+  # system("cd opt/generic-metal && patch -b -p1 < ../metal-2010-02-08-patch2/metal-2010-02-08-modified2.patch && make all")
+}
+
+run_metal <- function(input_fn_vec, output_fn) {
+  ctrl_file_template_fn <- "scripts/metal_script_template.txt"
+  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+    str_replace("OUTPUT_FILENAME", output_fn)
+  process_lines <- paste0("PROCESS ", input_fn_vec)
+  ctrl_file <- append(ctrl_file, process_lines, 
+                      after = grep("PROCESS lines below", ctrl_file))
+  writeLines(ctrl_file, con = "scripts/metal_script.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script.txt", intern = TRUE)
+}
+```
+
+```{r prep-pop-meta-analysis}
+summary_stats_fns <- list.files("easyqc2_output/", pattern = "^CLEANED.*gz$", 
+                                full.names = TRUE)
+
+pop_ma_design_df <- tibble(ss_fn = summary_stats_fns) %>%
+  mutate(split_col = gsub(".*CLEANED\\.PHASE2\\.", "", ss_fn)) %>%
+  separate_wider_delim(split_col, ".",
+                       names = c("study", "pop", "pheno", "exposure", "sex", 
+                                 "date", "cpaid", "gz")) %>%
+  group_by(pop, pheno, exposure, sex) %>%
+  summarise(ss_fn_vec = list(ss_fn), .groups = "drop") %>%
+  mutate(output_prefix = paste0("metal_output/",
+                                paste(pop, pheno, exposure, sex, "1GC", sep = "_")))
+pop_ma_design_df %>%
+  kable(caption = "All population-specific meta-analyses to be run")
+```
+
+```{r run-pop-meta-analysis}
+walk2(pop_ma_design_df$ss_fn_vec, pop_ma_design_df$output_prefix,
+      function(f, p) run_metal(f, paste0(p, " .TBL")))
+```
+
+```{r prep-cross-pop-meta-analysis}
+cross_pop_ma_design_df <- pop_ma_design_df %>%
+  mutate(pop_ma_output_fn = paste0(output_prefix, "1.TBL")) %>%
+  group_by(pheno, exposure, sex) %>%
+  summarise(fn_vec = list(pop_ma_output_fn), .groups = "drop") %>%
+  mutate(output_prefix = paste0("metal_output/",
+                                paste("ALL", pheno, exposure, sex, "2GC", sep = "_")))
+cross_pop_ma_design_df %>%
+  kable(caption = "All cross-population meta-analyses to be run")
+```
+
+```{r run-cross-pop-meta-analysis}
+walk2(cross_pop_ma_design_df$fn_vec, cross_pop_ma_design_df$output_prefix,
+      function(f, p) run_metal(f, paste0(p, " .TBL")))
+```

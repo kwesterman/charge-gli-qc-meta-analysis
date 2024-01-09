@@ -1,0 +1,49 @@
+#################################################################################################################
+##### EasyQC-script to perform meta-QC on CLEANED Model2 files
+##### EasyQC version: 9.2
+##### Programmer: Thomas Winkler, 2014-10-08
+##### Contact: thomas.winkler@klinik.uni-regensburg.de
+#################################################################################################################
+
+### TO DO: 	Define here format and input columns
+DEFINE	--pathOut /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/
+		--strSeparator WHITESPACE
+		--acolIn MarkerName;Allele1;Allele2;Freq1;FreqSE;MinFreq;MaxFreq;Effect;StdErr;IntEffect;IntStdErr;IntCov;ChiSq2df;P.value;Direction;DirectionInt;HetDf;TotalSampleSize
+		--acolInClasses character;character;character;numeric;numeric;numeric;numeric;numeric;numeric;numeric;numeric;numeric;numeric;numeric;character;character;numeric;numeric
+		--acolNewName cpaid;A1;A2;EAF;EAFSE;MinEAF;MaxEAF;BETA_SNP;SE_SNP;BETA_INT;SE_INT;COV_INT;ChiSq2df;P_SNP;Direction;DirectionInt;HetDf;total_N
+
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/LTST_M1_2DF/EA_M1_JOINT__LTST_TG_COMBINED_SET11.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/LTST_M1_2DF/EA_M1_JOINT__LTST_TG_COMBINED_SET21.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/STST_M1_2DF/EA_M1_JOINT__STST_TG_COMBINED_SET11.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/STST_M1_2DF/EA_M1_JOINT__STST_TG_COMBINED_SET21.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/STST_M1_2DF/AA_M1_JOINT_STST_TG_COMBINED_SET21.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/STST_M1_2DF/TRANS_M1_JOINT__STST_TG_COMBINED_SET11.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/STST_M1_2DF/TRANS_M1_JOINT__STST_TG_COMBINED_SET21.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/LTST_M1_2DF/AA_M1_JOINT_LTST_TG_COMBINED_SET21.TBL
+EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/LTST_M1_2DF/TRANS_M1_JOINT__LTST_TG_COMBINED_SET11.TBL
+#EASYIN	--fileIn /gpfs/work2/0/lumcukb/SLEEP-LIPIDS-CHARGE/META_TG/LTST_M1_2DF/TRANS_M1_JOINT__LTST_TG_COMBINED_SET21.TBL
+
+#################################################################################################################
+
+START EASYSTRATA
+
+CLEAN --rcdClean (total_N<20000) --strCleanName Excluded_SNPs
+CLEAN --rcdClean (EAF>0.995|EAF<0.005) --strCleanName Excluded_SNPs_EAF_filders
+
+GC 		--colPval P_SNP
+
+QQPLOT 		--acolQQPlot P_SNP.GC
+		--astrColour black
+		--anumSymbol 0;1
+		--numPvalOffset 1.0
+		--strPlotName QQPLOT
+
+GETCOLS 	--acolOut cpaid;CHR;POS;A1;A2;EAF;EAFSE;MinEAF;MaxEAF;BETA_SNP;SE_SNP;BETA_INT;SE_INT;COV_INT;ChiSq2df;P_SNP;P_SNP.GC;Direction;DirectionInt;HetDf;total_N
+
+WRITE		--strPrefix PROCESSED.
+		--strMissing . 
+		--strMode txt
+
+CRITERION --rcdCrit P_SNP.GC<5e-8 --strCritName SNPs_5e08_TG
+
+STOP EASYSTRATA

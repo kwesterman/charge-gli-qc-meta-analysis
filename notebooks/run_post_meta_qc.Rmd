@@ -1,0 +1,48 @@
+---
+title: "Run post-meta-analysis QC"
+author: "Kenny Westerman"
+output: html_document
+---
+
+To-do:
+* Install separate EasyStrata package
+* 4 easystrata scripts (need template .ecf for each)
+  - cross-pop, combined
+  - cross-pop, bidirectional
+  - pop-specific, combined 
+  - pop-specific, bidirectional
+
+```{r setup, include=FALSE}
+ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
+
+if (!require(EasyQC2)) {
+  system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
+  devtools::install_local("opt/EasyQC2_1.1.1.tar.gz")
+}
+library(EasyQC2)
+
+library(tidyverse)
+library(knitr)
+
+system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
+```
+
+```{r prep-qc}
+run_qc <- function(input_fn, output_dir) {
+  ctrl_file_template_fn <- "scripts/post_meta_qc_template.ecf"
+  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+    str_replace("OUTPUT_DIR", output_dir) %>%
+    str_replace("INPUT_FILE", input_fn)
+  writeLines(ctrl_file, con = "scripts/post_meta_qc.ecf")
+  EasyQC2("scripts/post_meta_qc.ecf")
+}
+```
+
+```{r run-qc}
+all_metal_output_fns <- list.files("metal_output/", pattern = ".TBL$", 
+                                   full.names = TRUE)
+
+output_dir <- "easystrata_output"
+
+walk(all_metal_output_fns, function(f) run_qc(f, output_dir))
+```

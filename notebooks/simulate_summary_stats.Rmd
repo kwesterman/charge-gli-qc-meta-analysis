@@ -1,0 +1,55 @@
+---
+title: Simulate summary statistics
+author: Kenny Westerman
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+```{r simulate-sumstats}
+simulate_sumstats <- function(n_variants, study, ancestry, sex) {
+  sumstats_df <- tibble(
+    SNPID = as.character(seq(1, n_variants)),
+    CHR = sample(seq(1, 22), size = n_variants, replace = TRUE),
+    POS = sample(seq(1, 1e6), size = n_variants, replace = FALSE),
+    INFO = runif(n_variants, 0.6, 1),
+    EFFECT_ALLELE = sample(c("A", "C", "G", "T"), n_variants, replace = TRUE),
+    NON_EFFECT_ALLELE = sample(c("A", "C", "G", "T"), n_variants, replace = TRUE),
+    EAF_ALL = runif(n_variants, 0, 0.5),
+    EAF_E0 = runif(n_variants, 0, 0.5),
+    EAF_E1 = runif(n_variants, 0, 0.5),
+    N = 1000,
+    N_EXP = 500,
+    BETA_SNP_M2 = rnorm(n_variants, 0, 1),
+    SE_SNP_M2 = rgamma(n_variants, 2, 2),
+    P_SNP_M2 = runif(n_variants, 0, 1),
+    BETA_SNP_M1 = rnorm(n_variants, 0, 1),
+    SE_SNP_M1_MB = rgamma(n_variants, 2, 2),
+    P_SNP_M1_MB = runif(n_variants, 0, 1),
+    SE_SNP_M1_ROBUST = rgamma(n_variants, 2, 2),
+    P_SNP_M1_ROBUST = runif(n_variants, 0, 1),
+    BETA_INT = rnorm(n_variants, 0, 1),
+    SE_INT_MB = rgamma(n_variants, 2, 2),
+    P_INT_MB = runif(n_variants, 0, 1),
+    SE_INT_ROBUST = rgamma(n_variants, 2, 2),
+    P_INT_ROBUST = runif(n_variants, 0, 1),
+    P_JOINT_MB = runif(n_variants, 0, 1),
+    COV_SNP_INT_MB = rnorm(n_variants, 0, 1),
+    P_JOINT_ROBUST = runif(n_variants, 0, 1),
+    COV_SNP_INT_ROBUST = rnorm(n_variants, 0, 1)    
+  )
+  write_tsv(sumstats_df,
+            paste("simulated_sumstats/PHASE2", study, ancestry,
+                  "PHENO", "EXP", sex, "DATE.txt", sep = "."))
+}
+
+if (!file.exists("simulated_sumstats")) system("mkdir simulated_sumstats")
+expand_grid(
+  study = paste0("STUDY", 1:3),
+  ancestry = c("EUR", "AFR"),
+  sex = c("MALE", "FEMALE", "COMBINED")
+) %>%
+  rowwise() %>%
+  group_walk(~ simulate_sumstats(10000, .$study, .$ancestry, .$sex))
+```

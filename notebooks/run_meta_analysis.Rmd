@@ -1,0 +1,74 @@
+---
+title: "Run study/population-specific QC"
+author: "Kenny Westerman"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
+
+library(tidyverse)
+library(knitr)
+```
+
+```{r prep-meta-analysis}
+system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
+
+if (!file.exists("opt/metal***")) {
+  system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
+  system("tar xvf opt/generic-metal-2010-02-08.tar.gz -C opt/")
+  system("tar xvf opt/metal-2010-02-08-patch2.tar.gz -C opt/")
+  system("cd opt/generic-metal && patch -b -p1 < ../metal-2010-02-08-patch2/metal-2010-02-08-modified2.patch")
+}
+
+run_metal <- function(input_fn_vec, output_fn) {
+  ctrl_file_template_fn <- "scripts/metal_script_template.txt"
+  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+    str_replace("OUTPUT_FILENAME", output_fn)
+  process_lines <- paste0("PROCESS ", input_fn_vec)
+  ctrl_file <- append(ctrl_file, process_lines, 
+                      after = grep("PROCESS lines below", ctrl_file))
+  print(ctrl_file)
+  writeLines(ctrl_file, con = "scripts/metal_script.txt")
+  system("scripts/metal_script.txt", intern = TRUE)
+}
+
+summary_stats_fns <- list.files("easyqc2_output/", pattern = "^CLEANED.*gz$")
+run_metal(summary_stats_fns, "TEST_METAL .TBL")
+```
+
+```{r specify-datasets}
+summary_stats_fns <- list.files("easyqc2_output/", pattern = "^CLEANED.*gz$")
+
+studies <- paste0("STUDY", 1:2)
+populations <- c("EUR", "AFR")
+phenos <- "PHENO"
+exposures <- "EXP"
+sex_groups <- c("MALE", "FEMALE", "COMBINED")
+
+ss_combinations_df <- expand_grid(
+  study = studies,
+  pop = populations,
+  pheno = phenos,
+  exposure = exposures,
+  sex = sex_groups
+) %>%
+  mutate(ss_fn = paste("simulated_sumstats/PHASE2", 
+                       study, pop, pheno, exposure, sex, "DATE", "txt", 
+                       sep = ".")) %>%
+  filter(file.exists(ss_fn))
+ss_combinations_df %>%
+  kable(caption = "All sets of summary stats to be processed")
+```
+
+```{r run-study-qc}
+output_dir <- "easyqc2_output"
+
+easyqc2_runs_df <- ss_combinations_df %>%
+  group_by(study, pop) %>%
+  summarise(fn_vec = list(ss_fn), .groups = "keep")
+walk2(easyqc2_runs_df$fn_vec, easyqc2_runs_df$pop,
+      function(f, p) run_easyqc2(f, p, output_dir))
+
+# ss_fn <- "simulated_sumstats/PHASE2.STUDY1.AFR.PHENO.EXP.COMBINED.DATE.txt"
+```

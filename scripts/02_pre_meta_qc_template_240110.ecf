@@ -1,0 +1,67 @@
+##################################################################################################################################################################
+##### EasyQC-script to check CLEANED CHARGE phase 2 GLI-GWAS results prior to meta-analysis
+##### EasyQC2 version: 1.1.1
+##### Programmer: Thomas Winkler, 24-01-10
+##### Contact: thomas.winkler@ukr.de
+##################################################################################################################################################################
+
+### Define here 
+###  --pathOut: the path to the output folder
+###  --acolIn/acolInClasses: the columns to be read
+
+DEFINE	--pathOut OUTPUT_DIR
+			--acolIn cpaid;EAF_ALL;N;BETA_SNP_M2;SE_SNP_M2;COV_SNP_INT_MB
+			--acolInClasses character;numeric;numeric;numeric;numeric;numeric
+			--strMissing .
+			--strSeparator TAB
+
+### Define here the input files: 
+# EASYIN lines below ("CLEANED.*.cpaid.gz" files)
+
+### ... 
+### Suggest: RUN this script PER TRAIT/EXPOSURE/ANCESTRY combination as you would run files in an ancestry-specific meta-analysis
+### -> Have one EasyQC2 premeta script/run per metal script/run
+
+##### 240110: 	reduced to trait transformation checks based on M2 results 
+#####			(and exploratory checks on E centering; these may be ignored)
+
+##################################################################################################################################################################
+##################################################################################################################################################################
+## EASYQC Scripting interface:
+START EASYQC2
+
+### remove rare variants
+CLEAN --rcdClean EAF_ALL<0.01|EAF_ALL>0.99 --strCleanName numDrop.EAF_ALL.rare
+
+### check trait transformation based on M2
+
+EVALSTAT --colStat BETA_SNP_M2
+
+CALCULATE --rcdCalc max(N) --strCalcName N_max
+CALCULATE --rcdCalc median(SE_SNP_M2) --strCalcName SE_SNP_M2_median
+CALCULATE --rcdCalc median(1/sqrt(2*EAF_ALL*(1-EAF_ALL))) --strCalcName c_trans_ALL
+
+RPLOT 	--rcdRPlotX sqrt(N_max)
+		--rcdRPlotY c_trans_ALL/SE_SNP_M2_median
+		--arcdAdd2Plot abline(0,1,col='orange')
+		--strAxes lim(0,NULL,0,NULL)
+		--strPlotName SEN_PLOT
+## -> studies are supposed to line up so that there are no outliers
+
+		
+## exploratory check for E-centering
+
+CALCULATE --rcdCalc median(COV_SNP_INT_MB) --strCalcName COV_SNP_INT_MB_median
+RADDCOL --rcdRAddCol COV_SNP_INT_MB_median*N_max --colROut COV_times_N
+
+RPLOT 	--rcdRPlotX N_max
+		--rcdRPlotY COV_times_N
+		--strXlab Study_maxN
+		--strYlab Study_medianCOV_times_maxN
+		--strAxes lim(0,NULL,NULL,NULL)
+		--strPlotName COVN_PLOT
+## -> outlying studies towards y=0 may be problematic! 
+
+STOP EASYQC2
+#################################################################################################################
+#################################################################################################################

@@ -1,0 +1,105 @@
+#################################################################################################################
+##### EASYSTRATA2-script to run combined-meta (Stage1plus2), cross-population, int1df screen
+##### EASYSTRATA2 version: 1.2.4
+##### Programmer: Thomas Winkler, 2024-10-01
+##### Contact: thomas.winkler@klinik.uni-regensburg.de
+#################################################################################################################
+
+
+### Please DEFINE here the output path:
+DEFINE	--pathOut /path/to/results
+		--acolIn MarkerName;Allele1;Allele2;Freq1;Effect;StdErr;P.value;Direction;N
+		--acolInClasses character;character;character;numeric;numeric;numeric;numeric;character;numeric
+		--acolNewName MarkerName;Allele1;Allele2;Freq1;BetaInt;SeInt;PInt;Direction;N
+		--colMerge MarkerName
+		--strSeparator TAB
+
+
+###################	
+## Read <S1plusS2, cross-population, Model-1 metal results (based on SCHEME STDERR, i.e. the 1 df meta-analysis on interaction effects !)>:
+## & Merge respective Model-2 metal results (based on SCHEME STDERR, i.e. the 1 df meta-analysis on marginal effects)
+## CAUTION: THESE RESULTS ARE 2GC corrected due to running through metal 2-times with GC on (1st on studies; 2nd on pop-spec results)
+
+EASYIN --fileIn /path/to/inputs/sbp_cursmk_all_2gc_s1plus2_model1_int1df_metal.out
+EASYMERGE --fileIn /path/to/inputs/sbp_cursmk_all_2gc_s1plus2_model2_marginal1df_metal.out --acolIn MarkerName;P.value --acolInClasses character;numeric --acolNewName MarkerName;PMarginal
+
+## Run further Y/E results iteratively: 
+# EASYIN --fileIn /path/to/inputs/dbp_cursmk_all_2gc_s1plus2_model1_int1df_metal.out
+# EASYMERGE --fileIn /path/to/inputs/dbp_cursmk_all_2gc_s1plus2_model2_marginal1df_metal.out --acolIn MarkerName;P.value --acolInClasses character;numeric --acolNewName MarkerName;PMarginal
+
+# EASYIN --fileIn /path/to/inputs/sbp_py_all_2gc_s1plus2_model1_int1df_metal.out
+# EASYMERGE --fileIn /path/to/inputs/sbp_py_all_2gc_s1plus2_model2_marginal1df_metal.out --acolIn MarkerName;P.value --acolInClasses character;numeric --acolNewName MarkerName;PMarginal
+
+# ... 
+		
+## README: 
+## + Based on the analytical framework, the script implements the combined-meta, cross-population, int1df screen: 
+## + Please make the following adjustments below: 
+##   - Adjust the PATH to the bed files
+## + Check the output files with significant lead variants: 
+##   - "INDEP.int1df.indep.regionleads.txt" contains independent int1df region lead variants (d>500kb)
+##   - "INDEP.int1df.indep.locusleads.txt" contains independent int1df index variants (r2<0.1 within regions)
+
+#################################################################################################################
+## EASYSTRATA Scripting interface:
+START EASYX
+
+#########################
+### 1.QC: remove low maf, low N, missing stats, duplicated variants 
+CLEAN --rcdClean is.na(PInt)|is.na(PMarginal) --strCleanName numDropMissing
+CLEAN --rcdClean N<20000 --strCleanName numDropNlt20K
+CLEAN --rcdClean pmin(Freq1,1-Freq1)<0.001 --strCleanName numDropLowMaf
+CLEANDUPLICATES --colInMarker MarkerName --strMode removeall
+
+#########################
+### 2. Preprocessing: Get chr/pos from MarkerName, remove MHC and non-autosome variants
+STRSPLITCOL --colSplit MarkerName --strSplit : --numSplitIdx 1 --colOut chr
+STRSPLITCOL --colSplit MarkerName --strSplit : --numSplitIdx 2 --colOut pos
+EDITCOL --rcdEditCol as.integer(pos) --colEdit pos
+CLEAN --rcdClean !chr%in%c(1:22) --strCleanName numDropNoAutosome
+CLEAN --rcdClean chr==6&pos>27500000&pos<34500000 --strCleanName numDropMHC1Mb
+## MHC region +/- 1Mb (chr6:28,510,120-33,480,577, https://www.ncbi.nlm.nih.gov/grc/human/regions/MHC)
+
+#########################
+### 3. Calculate GC lambda (suppress third correction; just get GC lambda !)
+GC --colPval PMarginal --blnSuppressCorrection 1
+GC --colPval PInt 
+
+#########################
+### 4. Analytical framework - b) Joint 2DF screen
+FDR --colPval PInt --colOut FDRInt
+
+## Obtain Bonferroni-corrected "PInt_2stepbonf" based on 2-step: 
+##  Pmarginal<1e-5 -> mg variants -> mgEff by PCA -> PInt_2stepbonf = PInt*mgEff
+PCA2STEP --rcdStep1Crit PMarginal<1e-5
+			--colStep2Pval PInt
+			--numPcaThrs 0.995
+			--blnParal 1
+			--filePcaBed /path/to/bedfiles/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+			--filePcaSample /path/to/samplefiles/1000GP_Phase3_<POP>.sample
+			--colInChr chr
+			--colInMarker MarkerName
+			--colOutPval PInt_2stepbonf
+			--strTag PCA2STEP
+
+## Obtain interaction FDR for marginal associated variants (this is different from the genome-wide FDR)
+ADDCOL --rcdAddCol as.numeric(ifelse(PMarginal<1e-5,PInt,NA)) --colOut PInt_2step
+FDR --colPval PInt_2step --colOut FDRInt_2step
+
+REMOVECOL --colRemove PInt_2step
+
+## Clumping of significant Int1df variants		
+INDEP --rcdCriterion (PInt<5e-8)|(PInt_2stepbonf<0.05)
+		--acolPval PInt
+		--colInChr chr
+		--colInPos pos
+		--numPosLim 500000
+		--fileClumpBed /path/to/bedfiles/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+		--fileClumpSample /path/to/samplefiles/1000GP_Phase3_<POP>.sample
+		--numR2Thrs 0.1
+		--blnParal 1
+		--colInMarker MarkerName
+		--strTag INDEP.int1df
+
+STOP EASYX
+#################################################################################################################

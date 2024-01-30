@@ -7,7 +7,7 @@
 
 
 ### Please DEFINE here the output path:
-DEFINE	--pathOut /path/to/results
+DEFINE	--pathOut OUTPUT_DIR
 		--acolIn MarkerName;Allele1;Allele2;Freq1;Effect;StdErr;P.value;Direction;N
 		--acolInClasses character;character;character;numeric;numeric;numeric;numeric;character;numeric
 		--acolNewName MarkerName;Allele1;Allele2;Freq1;BetaInt;SeInt;PInt;Direction;N
@@ -20,8 +20,8 @@ DEFINE	--pathOut /path/to/results
 ## & Merge respective Model-2 metal results (based on SCHEME STDERR, i.e. the 1 df meta-analysis on marginal effects)
 ## CAUTION: THESE RESULTS ARE 2GC corrected due to running through metal 2-times with GC on (1st on studies; 2nd on pop-spec results)
 
-EASYIN --fileIn /path/to/inputs/sbp_cursmk_all_2gc_s1plus2_model1_int1df_metal.out
-EASYMERGE --fileIn /path/to/inputs/sbp_cursmk_all_2gc_s1plus2_model2_marginal1df_metal.out --acolIn MarkerName;P.value --acolInClasses character;numeric --acolNewName MarkerName;PMarginal
+EASYIN --fileIn METAL_INT_FILE
+EASYMERGE --fileIn METAL_MARG_FILE --acolIn MarkerName;P.value --acolInClasses character;numeric --acolNewName MarkerName;PMarginal
 
 ## Run further Y/E results iteratively: 
 # EASYIN --fileIn /path/to/inputs/dbp_cursmk_all_2gc_s1plus2_model1_int1df_metal.out
@@ -63,7 +63,7 @@ CLEAN --rcdClean chr==6&pos>27500000&pos<34500000 --strCleanName numDropMHC1Mb
 #########################
 ### 3. Calculate GC lambda (suppress third correction; just get GC lambda !)
 GC --colPval PMarginal --blnSuppressCorrection 1
-GC --colPval PInt --blnSuppressCorrection 1
+GC --colPval PInt 
 
 #########################
 ### 4. Analytical framework - b) Joint 2DF screen
@@ -75,7 +75,8 @@ PCA2STEP --rcdStep1Crit PMarginal<1e-5
 			--colStep2Pval PInt
 			--numPcaThrs 0.995
 			--blnParal 1
-			--filePcaBed /path/to/bedfiles/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+			--filePcaBed reference_files/1000G_plinksets/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+			--filePcaSample reference_files/1000G_samplefiles/1000GP_Phase3_<POP>.sample
 			--colInChr chr
 			--colInMarker MarkerName
 			--colOutPval PInt_2stepbonf
@@ -93,7 +94,8 @@ INDEP --rcdCriterion (PInt<5e-8)|(PInt_2stepbonf<0.05)
 		--colInChr chr
 		--colInPos pos
 		--numPosLim 500000
-		--fileClumpBed /path/to/bedfiles/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+		--fileClumpBed reference_files/1000G_plinksets/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
+		--fileClumpSample reference_files/1000G_samplefiles/1000GP_Phase3_<POP>.sample
 		--numR2Thrs 0.1
 		--blnParal 1
 		--colInMarker MarkerName

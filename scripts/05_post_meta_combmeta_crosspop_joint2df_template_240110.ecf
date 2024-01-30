@@ -1,12 +1,12 @@
 #################################################################################################################
-##### EASYSTRATA2-script to run combined-meta (Stage1plus2), population-specific, joint2df screen
+##### EASYSTRATA2-script to run combined-meta (Stage1plus2), cross-population, joint2df screen
 ##### EASYSTRATA2 version: 1.2.4
 ##### Programmer: Thomas Winkler, 2024-01-10
 ##### Contact: thomas.winkler@klinik.uni-regensburg.de
 #################################################################################################################
 
 ### Please DEFINE here the output path:
-DEFINE	--pathOut /path/to/results
+DEFINE	--pathOut OUTPUT_DIR
 		--acolIn MarkerName;Allele1;Allele2;Freq1;Effect;StdErr;IntEffect;IntStdErr;IntCov;P.value;N
 		--acolInClasses character;character;character;numeric;numeric;numeric;numeric;numeric;numeric;numeric;numeric
 		--acolNewName MarkerName;Allele1;Allele2;Freq1;Effect;StdErr;IntEffect;IntStdErr;IntCov;PJoint;N
@@ -18,7 +18,7 @@ DEFINE	--pathOut /path/to/results
 ## Read <S1plusS2, cross-population, Model-1 joint metal results (based on SCHEME INTERACTION)>:
 ## CAUTION: THESE RESULTS ARE 2GC corrected due to running through metal 2-times with GC on (1st on studies; 2nd on pop-spec results)
 
-EASYIN --fileIn /path/to/inputs/sbp_cursmk_all_2gc_s1plus2_model1_joint2df_metal.out
+EASYIN --fileIn METAL_JOINT_FILE
 
 ## Run further Y/E results iteratively: 
 # EASYIN --fileIn /path/to/inputs/dbp_cursmk_all_2gc_s1plus2_model1_joint2df_metal.out
@@ -56,20 +56,19 @@ CLEAN --rcdClean chr==6&pos>27500000&pos<34500000 --strCleanName numDropMHC1Mb
 
 #########################
 ### 3. Calculate GC lambda (suppress third correction; just get GC lambda !)
-GC --colPval PJoint 
+GC --colPval PJoint --blnSuppressCorrection 1
 
 #########################
 ### 4. Analytical framework - b) Joint 2DF screen
-FDR --colPval PJoint.GC --colOut FDRJoint
+FDR --colPval PJoint --colOut FDRJoint
 
 ## Clumping of significant Joint2df variants
-INDEP --rcdCriterion PJoint.GC<5e-8
-		--acolPval PJoint.GC
+INDEP --rcdCriterion PJoint<5e-8
+		--acolPval PJoint
 		--colInChr chr
 		--colInPos pos
 		--numPosLim 500000
-		--fileClumpBed /path/to/bedfiles/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
-		--fileClumpSample /path/to/samplefiles/1000GP_Phase3_<POP>.sample
+		--fileClumpBed reference_files/1000G_plinksets/1000g_topmed_imputed_chr<CHR>.hqx.cpaid.maf001
 		--numR2Thrs 0.1
 		--blnParal 1
 		--colInMarker MarkerName

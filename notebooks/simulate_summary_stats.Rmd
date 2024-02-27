@@ -8,7 +8,7 @@ library(tidyverse)
 ```
 
 ```{r simulate-sumstats}
-simulate_sumstats <- function(n_variants, study, ancestry, sex) {
+simulate_sumstats <- function(n_variants, study, ancestry, exposure, sex) {
   sumstats_df <- tibble(
     SNPID = as.character(seq(1, n_variants)),
     CHR = sample(seq(1, 22), size = n_variants, replace = TRUE),
@@ -41,15 +41,16 @@ simulate_sumstats <- function(n_variants, study, ancestry, sex) {
   )
   write_tsv(sumstats_df,
             paste("simulated_sumstats/PHASE2", study, ancestry,
-                  "PHENO", "EXP", sex, "DATE.txt", sep = "."))
+                  "PHENO", exposure, sex, "DATE.txt", sep = "."))
 }
 
 if (!file.exists("simulated_sumstats")) system("mkdir simulated_sumstats")
 expand_grid(
-  study = paste0("STUDY", 1:3),
+  study = paste0("STUDY", 1:4),
   ancestry = c("EUR", "AFR"),
+  exposure = paste0("EXP", 1:2),
   sex = c("MALE", "FEMALE", "COMBINED")
 ) %>%
   rowwise() %>%
-  group_walk(~ simulate_sumstats(10000, .$study, .$ancestry, .$sex))
+  group_walk(~ simulate_sumstats(10000, .$study, .$ancestry, .$exposure, .$sex))
 ```

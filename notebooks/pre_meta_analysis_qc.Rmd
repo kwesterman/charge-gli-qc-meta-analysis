@@ -1,0 +1,65 @@
+---
+title: "Run pre-meta-analysis QC"
+author: "Kenny Westerman"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
+
+library(EasyQC2)
+library(tidyverse)
+library(knitr)
+
+system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
+```
+
+# Pre-meta-analysis QC
+
+```{r prep-pre-meta-qc}
+if (!file.exists("reference_files")) {
+  system(paste0("gsutil cp -r ", ws_bucket, "/reference_files ."))
+}
+
+run_pre_meta_qc <- function(fn_vec, output_dir) {
+  ctrl_file_template_fn <- "scripts/02_pre_meta_qc_template_240110.ecf"
+  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+    str_replace("OUTPUT_DIR", output_dir) %>%
+    append(paste0("EASYIN --fileIn ", fn_vec), 
+           grep("EASYIN lines below", .))
+  writeLines(ctrl_file, con = "scripts/pre_meta_qc.ecf")
+  EasyQC2("scripts/pre_meta_qc.ecf")
+}
+
+studies <- paste0("STUDY", 1:4)
+populations <- c("EUR", "AFR")
+phenos <- "PHENO"
+exposures <- paste0("EXP", 1:2)
+sex_groups <- c("MALE", "FEMALE", "COMBINED")
+
+ss_combinations_df <- expand_grid(
+  study = studies,
+  pop = populations,
+  pheno = phenos,
+  exposure = exposures,
+  sex = sex_groups
+) %>%
+  mutate(e_type = ifelse(exposure == "EXP1", "bin", "quant")) %>%
+  mutate(ss_fn = paste("simulated_sumstats/PHASE2", 
+                       study, pop, pheno, exposure, sex, "DATE", "txt", 
+                       sep = ".")) %>%
+  filter(file.exists(ss_fn))
+ss_combinations_df %>%
+  kable(caption = "All sets of summary stats to be processed")
+```
+
+```{r run-pre-meta-qc}
+pre_meta_qc_runs_df <- ss_combinations_df %>%
+  mutate(easyqc_output_fn = paste0("easyqc2_output/CLEANED.",
+                                   gsub(".txt", ".cpaid.gz", 
+                                        basename(ss_fn)))) %>%
+  group_by(pop, pheno, exposure, sex) %>%
+  summarise(fn_vec = list(easyqc_output_fn), .groups = "drop")
+walk(pre_meta_qc_runs_df$fn_vec, 
+     function(f) run_pre_meta_qc(f, "easyqc2_output"))
+```

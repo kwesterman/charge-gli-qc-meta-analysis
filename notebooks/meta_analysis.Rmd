@@ -1,10 +1,11 @@
 ---
-title: "Run study/population-specific QC"
+title: "Run meta-analysis"
 author: "Kenny Westerman"
 output: html_document
 ---
 
 To-do:
+* Output filenames should be differentiated among the 3 types (M2, int, joint)
 * Meta-analysis should be additional grouped by stage
 
 ```{r setup, include=FALSE}
@@ -21,6 +22,7 @@ system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
 
 if (!file.exists("opt/patched_metal_20100208")) {
   system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
+  system("chmod 755 opt/patched_metal_20100208")
   # system("tar xvf opt/generic-metal-2010-02-08.tar.gz -C opt/")
   # system("wget https://github.com/libarchive/libarchive/releases/download/v3.7.2/libarchive-3.7.2.tar.gz && tar zxvf libarchive-3.7.2.tar.gz -C opt && cd opt/libarchive-3.7.2 && ./configure && make")
   # system("opt/libarchive-3.7.2/bsdtar xvf opt/metal-2010-02-08-patch2.tar.gz -C opt/")
@@ -28,15 +30,78 @@ if (!file.exists("opt/patched_metal_20100208")) {
   # system("cd opt/generic-metal && patch -b -p1 < ../metal-2010-02-08-patch2/metal-2010-02-08-modified2.patch && make all")
 }
 
-run_metal <- function(input_fn_vec, output_fn) {
-  ctrl_file_template_fn <- "scripts/metal_script_template.txt"
-  ctrl_file <- readLines(ctrl_file_template_fn) %>%
-    str_replace("OUTPUT_FILENAME", output_fn)
+run_metal_popspecific <- function(input_fn_vec, output_prefix) {
   process_lines <- paste0("PROCESS ", input_fn_vec)
+  
+  ctrl_file_1 <- readLines("scripts/03_metal_popspecific_m2_snp_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_MARG .TBL"))
+  ctrl_file_1 <- append(ctrl_file_1, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_1))
+  writeLines(ctrl_file_1, con = "scripts/metal_script_1.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_1.txt", intern = TRUE)
+  
+  ctrl_file_2 <- readLines("scripts/03_metal_popspecific_m1_int1_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_INT .TBL"))
+  ctrl_file_2 <- append(ctrl_file_2, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_2))
+  writeLines(ctrl_file_2, con = "scripts/metal_script_2.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_2.txt", intern = TRUE)
+  
+  ctrl_file_3 <- readLines("scripts/03_metal_popspecific_m1_joint2df_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_JOINT .TBL"))
+  ctrl_file_3 <- append(ctrl_file_3, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_3))
+  writeLines(ctrl_file_3, con = "scripts/metal_script_3.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_3.txt", intern = TRUE)
+  
+  system("rm scripts/metal_script_*.txt")
+}
+
+run_metal_crosspop <- function(input_fn_vec, output_prefix) {
+  process_lines <- paste0("PROCESS ", input_fn_vec)
+  
+  if (grepl("_MARG$", output_prefix)) {
+    ctrl_file_fn <- "scripts/04_metal_crosspop_m2_snp_template.txt"
+  } else if (grepl("_INT$", output_prefix)) {
+    ctrl_file_fn <- "scripts/04_metal_crosspop_m1_int_template.txt"
+  } else if (grepl("_JOINT$", output_prefix)) {
+    ctrl_file_fn <- "scripts/04_metal_crosspop_m1_joint2df_template.txt"
+  }
+  ctrl_file <- readLines(ctrl_file_fn) %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, " .TBL"))
   ctrl_file <- append(ctrl_file, process_lines, 
                       after = grep("PROCESS lines below", ctrl_file))
   writeLines(ctrl_file, con = "scripts/metal_script.txt")
   system("opt/patched_metal_20100208 scripts/metal_script.txt", intern = TRUE)
+  
+  system("rm scripts/metal_script.txt")
+}
+
+run_metal_crosspop_old <- function(input_fn_vec, output_prefix) {
+  process_lines <- paste0("PROCESS ", input_fn_vec)
+  
+  ctrl_file_1 <- readLines("scripts/04_metal_crosspop_m2_snp_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_MARG .TBL"))
+  ctrl_file_1 <- append(ctrl_file_1, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_1))
+  writeLines(ctrl_file_1, con = "scripts/metal_script_1.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_1.txt", intern = TRUE)
+  
+  ctrl_file_2 <- readLines("scripts/04_metal_crosspop_m1_int_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_INT .TBL"))
+  ctrl_file_2 <- append(ctrl_file_2, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_2))
+  writeLines(ctrl_file_2, con = "scripts/metal_script_2.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_2.txt", intern = TRUE)
+  
+  ctrl_file_3 <- readLines("scripts/04_metal_crosspop_m1_joint2df_template.txt") %>%
+    str_replace("OUTPUT_FILENAME", paste0(output_prefix, "_JOINT .TBL"))
+  ctrl_file_3 <- append(ctrl_file_3, process_lines, 
+                        after = grep("PROCESS lines below", ctrl_file_3))
+  writeLines(ctrl_file_3, con = "scripts/metal_script_3.txt")
+  system("opt/patched_metal_20100208 scripts/metal_script_3.txt", intern = TRUE)
+  
+  system("rm scripts/metal_script_*.txt")
 }
 ```
 
@@ -59,21 +124,22 @@ pop_ma_design_df %>%
 
 ```{r run-pop-meta-analysis}
 walk2(pop_ma_design_df$ss_fn_vec, pop_ma_design_df$output_prefix,
-      function(f, p) run_metal(f, paste0(p, " .TBL")))
+      function(f, p) run_metal_popspecific(f, p))
 ```
 
 ```{r prep-cross-pop-meta-analysis}
 cross_pop_ma_design_df <- pop_ma_design_df %>%
-  mutate(pop_ma_output_fn = paste0(output_prefix, "1.TBL")) %>%
-  group_by(pheno, exposure, sex) %>%
+  expand_grid(test = c("MARG", "INT", "JOINT")) %>%
+  mutate(pop_ma_output_fn = paste0(output_prefix, "_", test, "1.TBL")) %>%
+  group_by(pheno, exposure, sex, test) %>%
   summarise(fn_vec = list(pop_ma_output_fn), .groups = "drop") %>%
   mutate(output_prefix = paste0("metal_output/",
-                                paste("ALL", pheno, exposure, sex, "2GC", sep = "_")))
+                                paste("ALL", pheno, exposure, sex, "2GC", test, sep = "_")))
 cross_pop_ma_design_df %>%
   kable(caption = "All cross-population meta-analyses to be run")
 ```
 
 ```{r run-cross-pop-meta-analysis}
 walk2(cross_pop_ma_design_df$fn_vec, cross_pop_ma_design_df$output_prefix,
-      function(f, p) run_metal(f, paste0(p, " .TBL")))
+      function(f, p) run_metal_crosspop(f, p))
 ```

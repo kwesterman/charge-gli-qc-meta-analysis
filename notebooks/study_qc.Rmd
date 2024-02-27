@@ -1,18 +1,15 @@
 ---
-title: "Run study/population-specific QC"
+title: "Study/population-specific QC"
 author: "Kenny Westerman"
 output: html_document
 ---
-
-To-do:
-* Separate EasyQC template scripts for binary and quantitative
 
 ```{r setup, include=FALSE}
 ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
 
 if (!require(EasyQC2)) {
   system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
-  devtools::install_local("opt/EasyQC2_1.1.1.tar.gz")
+  devtools::install_local("opt/EasyQC2_1.1.2.tar.gz")
 }
 library(EasyQC2)
 
@@ -48,9 +45,13 @@ if (!file.exists("reference_files")) {
   system(paste0("gsutil cp -r ", ws_bucket, "/reference_files ."))
 }
 
-run_study_qc <- function(fn_vec, pop, output_dir) {
-  ctrl_file_template_fn <- "scripts/study_qc_template.ecf"
-  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+run_study_qc <- function(fn_vec, e_type, pop, output_dir) {
+  if (e_type == "bin") {
+    ctrl_file_template <- "scripts/01_study_qc_bine_template_240110.ecf"
+  } else if (e_type == "quant") {
+    ctrl_file_template <- "scripts/01_study_qc_quante_template_240110.ecf"
+  }
+  ctrl_file <- readLines(ctrl_file_template) %>%
     str_replace("OUTPUT_DIR", output_dir) %>%
     str_replace("1000G_[A-Z]+_p3v5", paste0("1000G_", pop, "_p3v5")) %>%
     append(paste0("EASYIN --fileIn ", fn_vec), which(. == "### Input files:"))
@@ -58,10 +59,10 @@ run_study_qc <- function(fn_vec, pop, output_dir) {
   EasyQC2("scripts/study_qc.ecf")
 }
 
-studies <- paste0("STUDY", 1:2)
+studies <- paste0("STUDY", 1:4)
 populations <- c("EUR", "AFR")
 phenos <- "PHENO"
-exposures <- "EXP"
+exposures <- paste0("EXP", 1:2)
 sex_groups <- c("MALE", "FEMALE", "COMBINED")
 
 ss_combinations_df <- expand_grid(
@@ -71,6 +72,7 @@ ss_combinations_df <- expand_grid(
   exposure = exposures,
   sex = sex_groups
 ) %>%
+  mutate(e_type = ifelse(exposure == "EXP1", "bin", "quant")) %>%
   mutate(ss_fn = paste("simulated_sumstats/PHASE2", 
                        study, pop, pheno, exposure, sex, "DATE", "txt", 
                        sep = ".")) %>%
@@ -83,31 +85,8 @@ ss_combinations_df %>%
 output_dir <- "easyqc2_output"
 
 study_qc_runs_df <- ss_combinations_df %>%
-  group_by(study, pop) %>%
+  group_by(e_type, pop) %>%
   summarise(fn_vec = list(ss_fn), .groups = "drop")
-walk2(study_qc_runs_df$fn_vec, study_qc_runs_df$pop,
-      function(f, p) run_study_qc(f, p, output_dir))
-```
-
-# Pre-meta-analysis (cross-study) QC
-
-```{r run-pre-meta-qc}
-run_pre_meta_qc <- function(fn_vec, output_dir) {
-  ctrl_file_template_fn <- "scripts/pre_meta_qc_template.ecf"
-  ctrl_file <- readLines(ctrl_file_template_fn) %>%
-    str_replace("OUTPUT_DIR", output_dir) %>%
-    append(paste0("EASYIN --fileIn ", fn_vec), 
-           which(. == "# EASYIN lines below (.cpaid.gz files)"))
-  writeLines(ctrl_file, con = "scripts/pre_meta_qc.ecf")
-  EasyQC2("scripts/pre_meta_qc.ecf")
-}
-
-pre_meta_qc_runs_df <- ss_combinations_df %>%
-  mutate(easyqc_output_fn = paste0("easyqc2_output/CLEANED.",
-                                   gsub(".txt", ".cpaid.gz", 
-                                        basename(ss_fn)))) %>%
-  group_by(pop, pheno, exposure, sex) %>%
-  summarise(fn_vec = list(easyqc_output_fn), .groups = "drop")
-walk(pre_meta_qc_runs_df$fn_vec, 
-     function(f) run_pre_meta_qc(f, "easyqc2_output"))
+pwalk(with(study_qc_runs_df, list(fn_vec, e_type, pop)),
+      function(f, et, p) run_study_qc(f, et, p, output_dir))
 ```

@@ -4,45 +4,81 @@ author: "Kenny Westerman"
 output: html_document
 ---
 
-To-do:
-* Install separate EasyStrata package
-* 4 easystrata scripts (need template .ecf for each)
-  - cross-pop, combined
-  - cross-pop, bidirectional
-  - pop-specific, combined 
-  - pop-specific, bidirectional
-
 ```{r setup, include=FALSE}
-ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5"
+ws_bucket <- "gs://fc-e4b9029b-bcb4-41b6-8edc-5b37e7719bf5" 
 
-if (!require(EasyQC2)) {
+if (!require(EasyStrata2)) {
   system(paste0("gsutil cp -r ", ws_bucket, "/opt ."))
-  devtools::install_local("opt/EasyQC2_1.1.1.tar.gz")
+  devtools::install_local("opt/EasyStrata2_1.2.7.tar.gz")
 }
-library(EasyQC2)
+library(EasyStrata2)
 
 library(tidyverse)
 library(knitr)
 
 system(paste0("gsutil cp -r ", ws_bucket, "/scripts ."))
+system(paste0("gsutil cp -r ", ws_bucket, "/reference_files ."))
 ```
 
-```{r prep-postprocessing}
-run_qc <- function(input_fn, output_dir) {
-  ctrl_file_template_fn <- "scripts/post_meta_qc_template.ecf"
-  ctrl_file <- readLines(ctrl_file_template_fn) %>%
+```{r prep-crosspop-postprocessing}
+run_crosspop_postprocessing <- function(tag, output_dir) {
+  ctrl_file_1 <- readLines("scripts/05_post_meta_combmeta_crosspop_int1df_template_240110.ecf") %>%
     str_replace("OUTPUT_DIR", output_dir) %>%
-    str_replace("INPUT_FILE", input_fn)
-  writeLines(ctrl_file, con = "scripts/post_meta_qc.ecf")
-  EasyQC2("scripts/post_meta_qc.ecf")
+    str_replace("METAL_INT_FILE", paste0(tag, "_INT1.TBL")) %>%
+    str_replace("METAL_MARG_FILE", paste0(tag, "_MARG1.TBL"))
+  writeLines(ctrl_file_1, con = "scripts/postprocessing_script_1.txt")
+  EasyStrata2("scripts/postprocessing_script_1.txt")
+
+  ctrl_file_2 <- readLines("scripts/05_post_meta_combmeta_crosspop_joint2df_template_240110.ecf") %>%
+    str_replace("OUTPUT_DIR", output_dir) %>%
+    str_replace("METAL_JOINT_FILE", paste0(tag, "_JOINT1.TBL"))
+  writeLines(ctrl_file_2, con = "scripts/postprocessing_script_2.txt")
+  EasyStrata2("scripts/postprocessing_script_2.txt")
+  
+  system("rm scripts/postprocessing_script_*.txt")
 }
 ```
 
-```{r run-postprocessing}
-all_metal_output_fns <- list.files("metal_output/", pattern = ".TBL$", 
-                                   full.names = TRUE)
+```{r run-crosspop-postprocessing}
+metal_output_files <- list.files("metal_output/", pattern = "^ALL.*TBL$", 
+                                 full.names = TRUE)
+metal_output_tags <- unique(gsub("_[A-Z]*1.TBL", "", metal_output_files))
 
 output_dir <- "easystrata_output"
 
-walk(all_metal_output_fns, function(f) run_qc(f, output_dir))
+walk(metal_output_tags, function(tag) run_crosspop_postprocessing(tag, output_dir))
+```
+
+```{r prep-popspecific-postprocessing}
+run_popspecific_postprocessing <- function(tag, output_dir) {
+  pop <- gsub("_.*", "", basename(tag))
+  
+  ctrl_file_1 <- readLines("scripts/05_post_meta_combmeta_popspecific_int1df_template_240110.ecf") %>%
+    str_replace("OUTPUT_DIR", output_dir) %>%
+    str_replace("METAL_INT_FILE", paste0(tag, "_INT1.TBL")) %>%
+    str_replace("METAL_MARG_FILE", paste0(tag, "_MARG1.TBL")) %>%
+    str_replace("<POP>", pop)
+  writeLines(ctrl_file_1, con = "scripts/postprocessing_script_1.txt")
+  EasyStrata2("scripts/postprocessing_script_1.txt")
+
+  ctrl_file_2 <- readLines("scripts/05_post_meta_combmeta_popspecific_joint2df_template_240110.ecf") %>%
+    str_replace("OUTPUT_DIR", output_dir) %>%
+    str_replace("METAL_JOINT_FILE", paste0(tag, "_JOINT1.TBL")) %>%
+    str_replace("<POP>", pop)
+  writeLines(ctrl_file_2, con = "scripts/postprocessing_script_2.txt")
+  EasyStrata2("scripts/postprocessing_script_2.txt")
+  
+  system("rm scripts/postprocessing_script_*.txt")
+}
+```
+
+```{r run-popspecific-postprocessing}
+metal_output_files <- list.files("metal_output/", pattern = ".*TBL$", 
+                                 full.names = TRUE)
+metal_output_files <- grep("/ALL_", metal_output_files, value = TRUE, invert = TRUE)
+metal_output_tags <- unique(gsub("_[A-Z]*1.TBL", "", metal_output_files))
+
+output_dir <- "easystrata_output"
+
+walk(metal_output_tags, function(tag) run_popspecfic_postprocessing(tag, output_dir))
 ```

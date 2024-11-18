@@ -142,23 +142,6 @@ QQPLOT --acolQQPlot P_JOINT_MB
 		--strPlotName qq.JOINT_MB
 		--strMode subplot
 
-#### CHECK joint 2df from se/cov vs p (MB)
-
-JOINTTEST --colBetaMain BETA_SNP_M1 
-			--colSeMain SE_SNP_M1_MB
-			--colBetaInt BETA_INT 
-			--colSeInt SE_INT_MB
-			--colCovar COV_SNP_INT_MB
-			--colOutPjoint P_JOINT_MB_CALC
-
-SPLOT --rcdSPlotX -log10(P_JOINT_MB)
-		--rcdSPlotY -log10(P_JOINT_MB_CALC)
-		--rcdExclude P_JOINT_MB>0.05&P_JOINT_MB_CALC>0.05
-		--arcdAdd2Plot abline(a=0,b=1,col="red")
-		--strMode subplot
-		--strPlotName sp.check_JOINT_MB
-
-
 ## AF Checks
 
 ### Please allign AF ref ancestry to the EASYIN study ancestry
